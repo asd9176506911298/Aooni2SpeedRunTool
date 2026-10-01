@@ -34,6 +34,7 @@ namespace Aooni2SpeedRunTool
         private Lang _lang = Lang.En;
         private string _lastLangProbe;
         public static bool NoClip;
+        public static bool NoGameOver;
 
         private PlayerData _snap;
         private string _snapMapId;
@@ -86,6 +87,17 @@ namespace Aooni2SpeedRunTool
 
             if (Input.GetKeyDown(KeyCode.F2)) SaveState();
             if (Input.GetKeyDown(KeyCode.F3)) LoadState();
+
+            if (Input.GetKeyDown(KeyCode.F4))
+            {
+                NoGameOver = !NoGameOver;
+
+                Toast(L(
+                    $"NoGameOver: {NoGameOver}",
+                    $"無敵: {NoGameOver}",
+                    $"ゲームオーバーなし: {NoGameOver}"
+                ));
+            }
 
             ProcessAddItemQueue();
             ProcessPendingTeleport();
@@ -168,6 +180,17 @@ namespace Aooni2SpeedRunTool
                 // 背包整個換掉了，重新載入圖示，否則 UI 會等不到圖示
                 scene._inventoryService.LoadPossessionIconsAsync();
 
+                // 4. 同地圖瞬讀
+                if (scene.CurrentMap != null && scene.CurrentMap.MapData != null && scene.CurrentMap.MapData.Id == _snapMapId)
+                {
+                    var map = scene.CurrentMap;
+                    map.SetSprite(map.Player, _snap.Position);
+                    map.Player.ChangeDirection(_snap.Direction);
+                    map.ResetPartyMemberInformation();
+                    return;
+                }
+
+                // 跨地圖轉場
                 scene.TransitionMapAsync(_snapMapId, Blue.TransitionKind.Other, "", Blue.TransitionType.FadeoutCutin);
 
                 _repoMapId = _snapMapId;
