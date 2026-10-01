@@ -110,6 +110,32 @@ namespace Aooni2SpeedRunTool
                 ));
             }
 
+            if (Input.GetKeyDown(KeyCode.F5))
+            {
+                var all = MasterProvider.MapMaster.GetAll();
+               
+
+                int count = -1;
+               
+                var col = all.TryCast<Il2CppSystem.Collections.Generic.ICollection<MapMasterModel>>();
+
+                for (int i = 0; count < 0 || i < count; i++)
+                {
+                    MapMasterModel m;
+                    try { m = all[i]; }
+                    catch { break; }          // 超出範圍 → 結束
+
+                    if (m == null) break;
+                    AddMapEntry(m);
+                    string name = m.AssetName;
+                  
+                    var t = MasterProvider.SystemTextMaster.Get(m.SystemTextId);
+                    if (t != null && !string.IsNullOrEmpty(t.Text))
+                        name = $"SceneName: {t.Text}  AssetName: ({m.AssetName}) Id: {m.Id}";
+                    Plugin.Log.LogInfo(name);
+                }
+            }
+
             // 按下 [+]：增加數值，且會直接套用
             if (Input.GetKeyDown(KeyCode.KeypadPlus))
             {
