@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
@@ -29,6 +29,9 @@
     </Reference>
     <Reference Include="Shirakami">
       <HintPath>..\..\..\Steam\steamapps\common\Aooni2\BepInEx\interop\Shirakami.dll</HintPath>
+    </Reference>
+    <Reference Include="UniTask">
+      <HintPath>..\..\..\Steam\steamapps\common\Aooni2\BepInEx\interop\UniTask.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>..\..\..\Steam\steamapps\common\Aooni2\BepInEx\interop\UnityEngine.CoreModule.dll</HintPath>
