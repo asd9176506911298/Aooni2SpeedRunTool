@@ -161,6 +161,7 @@ namespace Aooni2SpeedRunTool
                 live.Steps.Set(copy.Steps.Value.Get());
                 live.DeadCount.Set(copy.DeadCount.Value.Get());
                 live.PlayTime.Set(copy.PlayTime.Value.Get());
+                Blue.PlayTimeCounter._seconds = (float)copy.PlayTime.Value.Get();
                 live.Position = _snap.Position;
                 live.Direction = _snap.Direction;
 
