@@ -11,6 +11,7 @@ namespace Aooni2SpeedRunTool
     {
         private string displaySteps = "0";
         private string displayTime = "00:00:00";
+        private string displayMap = "-";          // ★ 新增
         private string timeLabel = "Time";
         private float updateTimer = 0f;
         private const float updateInterval = 0.5f;
@@ -80,6 +81,7 @@ namespace Aooni2SpeedRunTool
             _lang = kana ? Lang.Ja : (han ? Lang.Zh : Lang.En);
 
             Plugin.Log.LogInfo($"[Lang] probe={probe}, lang={_lang}");
+            UpdateData();                                // ★ 新增：地圖名稱立刻換語言
             if (_showMapPanel) RefreshMapList();   // 地圖名稱立刻跟著換
         }
 
@@ -596,6 +598,26 @@ namespace Aooni2SpeedRunTool
                 string seconds = timeSpan.Seconds.ToString().PadLeft(2, '0');
 
                 displayTime = $"{hours}:{minutes}:{seconds}";
+                // ★ 目前地圖名稱（跟隨遊戲語言）
+                try
+                {
+                    var map = GameScene.Instance?.CurrentMap;
+                    if (map != null && map.MapData != null)
+                    {
+                        var t = MasterProvider.SystemTextMaster.Get(map.MapData.SystemTextId);
+                        displayMap = (t != null && !string.IsNullOrEmpty(t.Text))
+                            ? t.Text
+                            : map.MapData.AssetName;   // 查不到文字就顯示資源名稱
+                    }
+                    else
+                    {
+                        displayMap = "-";
+                    }
+                }
+                catch
+                {
+                    displayMap = "-";
+                }
             }
             catch
             {
@@ -619,7 +641,7 @@ namespace Aooni2SpeedRunTool
             float x = 20f;
             float y = 20f;
             float width = 220f;
-            float height = 165f;
+            float height = 190f;
 
             GUI.Box(new Rect(x - 5, y - 5, width, height), "");
 
@@ -627,12 +649,14 @@ namespace Aooni2SpeedRunTool
             GUI.skin.label.normal.textColor = Color.white;
             GUI.Label(new Rect(x, y, width, 25), displaySteps);
             GUI.Label(new Rect(x, y + 25, width, 25), $"{timeLabel}: {displayTime}");
+            GUI.Label(new Rect(x, y + 50, width, 25),                       // ★ 新增
+                $"{L("Map", "地圖", "マップ")}: {displayMap}");
             GUI.skin.label.normal.textColor = originalColor;
 
             bool busy = _addItemQueue.Count > 0;
             bool oldEnabled = GUI.enabled;
             GUI.enabled = !busy;
-            if (GUI.Button(new Rect(x, y + 55, width - 10, 30),
+            if (GUI.Button(new Rect(x, y + 80, width - 10, 30),
                 busy ? L("Adding...", "加入中...", "追加中...")
                      : L("Add all items", "添加該模式所有物品", "このモードの全アイテムを追加")))
             {
@@ -642,11 +666,11 @@ namespace Aooni2SpeedRunTool
 
             if (busy)
             {
-                GUI.Label(new Rect(x, y + 90, width, 25),
+                GUI.Label(new Rect(x, y + 115, width, 25),
                     $"{L("Remaining", "剩餘", "残り")}: {_addItemQueue.Count}");
             }
 
-            var mapBtn = new Rect(x, y + 120, width - 10, 30);
+            var mapBtn = new Rect(x, y + 145, width - 10, 30);
             GUI.Box(mapBtn, _showMapPanel
                 ? L("Close map menu", "關閉地圖選單", "マップメニューを閉じる")
                 : L("Teleport", "地圖傳送", "マップ移動"));
@@ -674,7 +698,7 @@ namespace Aooni2SpeedRunTool
 
         private void DrawMapPanel()
         {
-            float px = 20f, py = 195f;
+            float px = 20f, py = 215f;
             float pw = Mathf.Min(380f, Screen.width - px - 10f);
             const float rowH = 28f;
             int totalPages = Mathf.Max(1, (_maps.Count + MapsPerPage - 1) / MapsPerPage);
