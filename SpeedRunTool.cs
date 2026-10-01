@@ -46,6 +46,17 @@ namespace Aooni2SpeedRunTool
         private Vector2Int _repoPos;
         private Blue.Direction _repoDir;
 
+        // 自訂速度數值與最大值（預設值為 4.5 和 15.0）
+        private float customSpeed = 4.5f;
+        private float customMax = 6.0f;
+
+        // 預設直接開啟自訂速度狀態
+        private bool isCustomSpeedActive = true;
+
+        // 備份原始的數值（預設值為 4.5 和 6.0，保留給 * 鍵切換用）
+        private float originSpeed = 4.5f;
+        private float originMax = 6.0f;
+
         private string L(string en, string zh, string ja)
         {
             return _lang == Lang.Ja ? ja : (_lang == Lang.Zh ? zh : en);
@@ -99,9 +110,92 @@ namespace Aooni2SpeedRunTool
                 ));
             }
 
+            // 按下 [+]：增加數值，且會直接套用
+            if (Input.GetKeyDown(KeyCode.KeypadPlus))
+            {
+                customSpeed += 1f;
+                customMax += 1f;
+
+                isCustomSpeedActive = true;
+                Blue.Const.ValueSet.CharacterSpeed._max = new Shirakami.ProtectedFloat(customMax);
+                Blue.Const.ValueSet.CharacterSpeed._value = new Shirakami.ProtectedFloat(customSpeed);
+
+                Toast(L(
+                    $"Custom Speed: {customSpeed}",
+                    $"自訂速度: {customSpeed}",
+                    $"カスタム速度: {customSpeed}"
+                ));
+            }
+
+            // 按下 [-]：減少數值，且會直接套用
+            if (Input.GetKeyDown(KeyCode.KeypadMinus))
+            {
+                customSpeed -= 1f;
+                customMax -= 1f;
+
+                isCustomSpeedActive = true;
+                Blue.Const.ValueSet.CharacterSpeed._max = new Shirakami.ProtectedFloat(customMax);
+                Blue.Const.ValueSet.CharacterSpeed._value = new Shirakami.ProtectedFloat(customSpeed);
+
+                Toast(L(
+                    $"Custom Speed: {customSpeed}",
+                    $"自訂速度: {customSpeed}",
+                    $"カスタム速度: {customSpeed}"
+                ));
+            }
+
+            // 按下 [*] (KeypadMultiply)：切換「原始速度」與「自訂速度」
+            if (Input.GetKeyDown(KeyCode.KeypadMultiply))
+            {
+                isCustomSpeedActive = !isCustomSpeedActive; // 反轉狀態
+
+                if (isCustomSpeedActive)
+                {
+                    // 切換到自訂速度
+                    Blue.Const.ValueSet.CharacterSpeed._max = new Shirakami.ProtectedFloat(customMax);
+                    Blue.Const.ValueSet.CharacterSpeed._value = new Shirakami.ProtectedFloat(customSpeed);
+
+                    Toast(L(
+                        $"Switched to Custom Speed ({customSpeed})",
+                        $"已切換至：自訂速度 ({customSpeed})",
+                        $"カスタム速度に切り替えました ({customSpeed})"
+                    ));
+                }
+                else
+                {
+                    // 切換回原始速度
+                    Blue.Const.ValueSet.CharacterSpeed._max = new Shirakami.ProtectedFloat(originMax);
+                    Blue.Const.ValueSet.CharacterSpeed._value = new Shirakami.ProtectedFloat(originSpeed);
+
+                    Toast(L(
+                        $"Switched to Original Speed ({originSpeed})",
+                        $"已切換至：原始速度 ({originSpeed})",
+                        $"元の速度に切り替えました ({originSpeed})"
+                    ));
+                }
+            }
+
+            // 按下 [0]：將「自訂速度」重設回初始預設值（4.5 與 15.0）並直接套用
+            if (Input.GetKeyDown(KeyCode.Keypad0))
+            {
+                customSpeed = 4.5f;
+                customMax = 15.0f;
+                isCustomSpeedActive = true;
+
+                Blue.Const.ValueSet.CharacterSpeed._max = new Shirakami.ProtectedFloat(customMax);
+                Blue.Const.ValueSet.CharacterSpeed._value = new Shirakami.ProtectedFloat(customSpeed);
+
+                Toast(L(
+                    $"Custom Speed Reset: {customSpeed}",
+                    $"自訂速度已重設: {customSpeed}",
+                    $"カスタム速度をリセット: {customSpeed}"
+                ));
+            }
+
             ProcessAddItemQueue();
             ProcessPendingTeleport();
             ProcessReposition();
+
 
             updateTimer += Time.deltaTime;
             if (updateTimer >= updateInterval)
@@ -133,7 +227,7 @@ namespace Aooni2SpeedRunTool
 
                 var map = scene.CurrentMap;
                 var snap = new PlayerData(UserData.GetPlayerData());   // 深層複製
-                snap.Position = map.Player.Position;                   // 複製來的是舊座標，改成目前位置
+                snap.Position = map.Player.Position;                    // 複製來的是舊座標，改成目前位置
                 snap.Direction = map.Player.Direction;
 
                 _snap = snap;
@@ -165,7 +259,7 @@ namespace Aooni2SpeedRunTool
                 }
 
                 var live = UserData.GetPlayerData();
-                var copy = new PlayerData(_snap);          // 每次讀檔都用新複本，快照可重複使用
+                var copy = new PlayerData(_snap);         // 每次讀檔都用新複本，快照可重複使用
 
                 live.GameStatus = copy.GameStatus;
                 live.InventoryItems = copy.InventoryItems;
@@ -219,7 +313,6 @@ namespace Aooni2SpeedRunTool
                     return;
                 }
 
-                // 優先用 ICollection.Count 取得數量；失敗就用 -1，改成讀到例外為止
                 int count = -1;
                 try
                 {
@@ -253,7 +346,6 @@ namespace Aooni2SpeedRunTool
             string name = m.AssetName;
             try
             {
-                // 例如 SystemTextId = "MapName_SS_Op_Beach_Daytime"
                 var t = MasterProvider.SystemTextMaster.Get(m.SystemTextId);
                 if (t != null && !string.IsNullOrEmpty(t.Text))
                     name = $"{t.Text}  ({m.AssetName})";
@@ -366,7 +458,6 @@ namespace Aooni2SpeedRunTool
             return map.GetCellType(new Vector2Int(x, y)) == MapInfo.CellType.Floor;
         }
 
-        // 該格與上下左右都是地板
         private static bool IsOpen(RoomBase map, int x, int y)
         {
             return IsFloor(map, x, y)
@@ -379,7 +470,6 @@ namespace Aooni2SpeedRunTool
             result = Vector2Int.zero;
             var info = map.MapInfo;
 
-            // 1) 優先用 Tag 位置（遊戲本身就是用它放玩家）
             var events = info.Events;
             for (int i = 0; i < events.Length; i++)
             {
@@ -396,7 +486,6 @@ namespace Aooni2SpeedRunTool
                 }
             }
 
-            // 2) 掃描整張地圖，挑最靠近中心的開闊地板（y 為負，列 = -y）
             int w = info.Width, h = info.Height;
             float cx = w / 2f, cy = -h / 2f;
             float best = float.MaxValue;
@@ -430,7 +519,6 @@ namespace Aooni2SpeedRunTool
                     return;
                 }
 
-                // GetAll() 只回傳「目前劇本」的物品（Main 或 SeasideSchool）
                 var items = MasterProvider.ItemMaster.GetAll();
                 if (items == null) return;
 
@@ -440,7 +528,7 @@ namespace Aooni2SpeedRunTool
                 for (int i = 0; i < count; i++)
                 {
                     string id = items[i].Id;
-                    if (!UserData.HasItem(id))        // 已持有就跳過
+                    if (!UserData.HasItem(id))
                         _addItemQueue.Enqueue(id);
                 }
                 Plugin.Log.LogInfo($"[F2] 準備加入 {_addItemQueue.Count} 個物品");
@@ -458,7 +546,6 @@ namespace Aooni2SpeedRunTool
 
             try
             {
-                // 注意：_inventoryService 是私有欄位，IL2CPP interop 通常會公開
                 var svc = GameScene.Instance._inventoryService;
 
                 for (int n = 0; n < AddItemsPerFrame && _addItemQueue.Count > 0; n++)
@@ -480,31 +567,18 @@ namespace Aooni2SpeedRunTool
         {
             try
             {
-                // 1. 取得 MasterProvider 的字串（例如 "{0}steps"），並將 {0} 換成 steps 數值
-                // 如果你想改成 "steps: {0}" 或 "步: {0}"，可以把原本的文字中的 "{0}" 替換掉
                 int steps = Blue.Data.UserData.GetPlayerData().Steps.Value.Get();
                 try
                 {
                     string rawFormat = MasterProvider.SystemTextMaster.Get("MenuWindow_StepsValue").Text;
-                    // 如果原格式是 "{0}steps"，我們可以把它轉換成你想要的格式
-                    // 這裡示範將 {0} 轉移到自訂格式，例如：steps: {0} 或 步: {0}
-                    // 假設我們想把 rawFormat 裡面的 {0} 抽出來：
                     string stepsOnly = steps.ToString();
-
-                    // 方法 A：直接用原本的格式 (如果你希望維持遊戲內原本的翻譯位置)
                     displaySteps = string.Format(rawFormat, stepsOnly);
-
-                    // 方法 B：如果你想強制改成 "steps: {0}" 或依語系變化，可以這樣處理：
-                    // 如果原字串包含 "steps"，我們把它換成 "steps: {0}" 或套用你的規則
-                    // 這裡示範直接把 {0} 放到你指定的位置：
-                    // displaySteps = $"steps: {stepsOnly}"; // 或者是抓出數字填入
                 }
                 catch
                 {
                     displaySteps = $"steps: {steps}";
                 }
 
-                // 2. 取得時間標題 (例如 Time)
                 try
                 {
                     timeLabel = MasterProvider.SystemTextMaster.Get("MenuWindow_PlayTimeText").Text;
@@ -514,7 +588,6 @@ namespace Aooni2SpeedRunTool
                     timeLabel = "Time";
                 }
 
-                // 3. 取得並格式化遊戲時間 (格式為 {0}:{1}:{2})
                 int playTimeValue = Blue.Data.UserData.GetPlayerData().PlayTime.Value.Get();
                 TimeSpan timeSpan = new TimeSpan(0, 0, playTimeValue);
 
@@ -526,11 +599,9 @@ namespace Aooni2SpeedRunTool
             }
             catch
             {
-                // 略過未初始化時的錯誤
             }
         }
 
-        // 畫一個按鈕外觀，並用滑鼠事件自行判斷點擊
         private bool ClickButton(Rect r, string text)
         {
             GUI.Box(r, text);
