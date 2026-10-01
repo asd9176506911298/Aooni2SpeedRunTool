@@ -1,4 +1,6 @@
 ﻿using Blue.Common;
+using Blue.Data;
+using Blue.Data.Master.Model;
 using Il2CppSystem;
 using UnityEngine;
 
@@ -12,6 +14,10 @@ namespace Aooni2SpeedRunTool
         private float updateTimer = 0f;
         private const float updateInterval = 0.5f;
 
+        private readonly System.Collections.Generic.Queue<string> _addItemQueue
+            = new System.Collections.Generic.Queue<string>();
+        private const int AddItemsPerFrame = 3;   // 每幀加幾個，想更保守可改成 1
+
         private void Update()
         {
             if (Input.GetKeyDown(KeyCode.F1))
@@ -20,11 +26,74 @@ namespace Aooni2SpeedRunTool
                 LogAndGetStatus();
             }
 
+            if (Input.GetKeyDown(KeyCode.F2))
+            {
+                EnqueueAllItems();
+            }
+
+            ProcessAddItemQueue();
+
             updateTimer += Time.deltaTime;
             if (updateTimer >= updateInterval)
             {
                 updateTimer = 0f;
                 UpdateData();
+            }
+        }
+
+        private void EnqueueAllItems()
+        {
+            try
+            {
+                if (GameScene.Instance == null)
+                {
+                    Plugin.Log.LogWarning("[F2] GameScene 尚未就緒");
+                    return;
+                }
+
+                // GetAll() 只回傳「目前劇本」的物品（Main 或 SeasideSchool）
+                var items = MasterProvider.ItemMaster.GetAll();
+                if (items == null) return;
+
+                var collection = items.TryCast<Il2CppSystem.Collections.Generic.ICollection<ItemMasterModel>>();
+                int count = collection.Count;
+
+                for (int i = 0; i < count; i++)
+                {
+                    string id = items[i].Id;
+                    if (!UserData.HasItem(id))        // 已持有就跳過
+                        _addItemQueue.Enqueue(id);
+                }
+                Plugin.Log.LogInfo($"[F2] 準備加入 {_addItemQueue.Count} 個物品");
+            }
+            catch (System.Exception e)
+            {
+                Plugin.Log.LogError($"[F2] 失敗: {e}");
+            }
+        }
+
+        private void ProcessAddItemQueue()
+        {
+            if (_addItemQueue.Count == 0) return;
+            if (GameScene.Instance == null) { _addItemQueue.Clear(); return; }
+
+            try
+            {
+                // 注意：_inventoryService 是私有欄位，IL2CPP interop 通常會公開
+                var svc = GameScene.Instance._inventoryService;
+
+                for (int n = 0; n < AddItemsPerFrame && _addItemQueue.Count > 0; n++)
+                {
+                    svc.AddItem(_addItemQueue.Dequeue());
+                }
+
+                if (_addItemQueue.Count == 0)
+                    Plugin.Log.LogInfo("[F2] 所有物品已加入");
+            }
+            catch (System.Exception e)
+            {
+                Plugin.Log.LogError($"[F2] 加入物品失敗: {e}");
+                _addItemQueue.Clear();
             }
         }
 

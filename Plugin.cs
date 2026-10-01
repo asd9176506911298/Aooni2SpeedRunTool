@@ -2,6 +2,7 @@
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
 using HarmonyLib;
+using HarmonyLib.Tools;
 using Il2CppInterop.Runtime.Injection;
 using UnityEngine;
 
@@ -27,7 +28,7 @@ public class Plugin : BasePlugin
         Object.DontDestroyOnLoad(host);
         host.AddComponent<SpeedRunTool>();
 
-        Harmony.DEBUG = true;
+        HarmonyFileLog.Enabled = true;
         harmony.PatchAll(typeof(Patch));
 
         Log.LogInfo($"Plugin {MyPluginInfo.PLUGIN_GUID} is loaded!");
