@@ -293,16 +293,18 @@ namespace Aooni2SpeedRunTool
             queue.Enqueue(start);
             visited.Add(start);
 
+            // ★ 依照遊戲 BlueStar 的探索優先順序：直走 -> 右轉 -> 左轉 -> 後退
+            Blue.Direction forward = killer != null ? killer.Direction : Blue.Direction.Down;
             Blue.Direction[] dirs = new Blue.Direction[]
             {
-        Blue.Direction.Up,
-        Blue.Direction.Down,
-        Blue.Direction.Left,
-        Blue.Direction.Right
+        forward,
+        forward.TurnRight(),
+        forward.TurnLeft(),
+        forward.Reverse()
             };
 
             bool found = false;
-            int limit = 400; // 最多搜尋 400 格，足夠涵蓋所有地圖
+            int limit = 400;
 
             while (queue.Count > 0 && limit-- > 0)
             {
@@ -320,7 +322,6 @@ namespace Aooni2SpeedRunTool
 
                     if (visited.Contains(next)) continue;
 
-                    // 完全遵循遊戲的 CanMove 規則（包括破門、穿透判斷）
                     CanMoveArgumentOption option = new CanMoveArgumentOption(curr, d)
                     {
                         IgnoreCarryGimmick = true,
@@ -338,7 +339,6 @@ namespace Aooni2SpeedRunTool
 
             if (!found) return resultPath;
 
-            // 回溯重建路徑
             Vector2Int currStep = target;
             while (currStep != start)
             {
