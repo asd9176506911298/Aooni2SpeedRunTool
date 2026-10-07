@@ -34,6 +34,9 @@ F12：現在のセーブデータを再読み込み (リロード)
 
 移動軌跡表示 (または 移動経路表示)
 
+召喚鬼 (あくまで遊び用として、ゲーム内のキラーのストックを変更するものです)
+
+
 # Features English
 
 F1 NoClip
@@ -61,3 +64,5 @@ Add All Item
 Show Map Name
 
 Show Move Path
+
+Spawn Enemy ( It will change game's killer stock only for fun use)
