@@ -33,6 +33,12 @@
     <Reference Include="UniTask">
       <HintPath>..\..\..\Steam\steamapps\common\Aooni2\BepInEx\interop\UniTask.dll</HintPath>
     </Reference>
+    <Reference Include="Unity.Addressables">
+      <HintPath>..\..\..\Steam\steamapps\common\Aooni2\BepInEx\interop\Unity.Addressables.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.ResourceManager">
+      <HintPath>..\..\..\Steam\steamapps\common\Aooni2\BepInEx\interop\Unity.ResourceManager.dll</HintPath>
+    </Reference>
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>..\..\..\Steam\steamapps\common\Aooni2\BepInEx\interop\UnityEngine.CoreModule.dll</HintPath>
     </Reference>

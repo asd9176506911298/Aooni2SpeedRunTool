@@ -1,13 +1,24 @@
-﻿using System.Collections.Generic;
+﻿using System.Collections;
+using System.Collections.Generic;
+using System.Globalization;
+using BepInEx.Unity.IL2CPP.Utils;
 using Blue;
+using Blue.AssetManagement;
 using Blue.Common;
 using Blue.Data;
 using Blue.Data.Master.Model;
 using Blue.Room;
 using Blue.Sprites;
 using Blue.Star;
+using Cysharp.Threading.Tasks;
+using HarmonyLib;
 using Il2CppSystem;
 using UnityEngine;
+using UnityEngine.AddressableAssets.ResourceLocators;
+using UnityEngine.AddressableAssets;
+using UnityEngine.Playables;
+using UnityEngine.ResourceManagement.ResourceLocations;
+using static Blue.KillerManager;
 
 namespace Aooni2SpeedRunTool
 {
@@ -66,6 +77,65 @@ namespace Aooni2SpeedRunTool
         private Vector2Int _currentKillerTarget;
         private int _currentKillerSteps = -1; // -1 代表無敵人或未追擊
 
+        private bool _showKillerPanel;
+        private int _killerPage;
+        private const int KillersPerPage = 12;
+        private readonly List<Blue.KillerKind> _killerKinds = new List<Blue.KillerKind>();
+        private readonly Dictionary<Blue.KillerKind, int> _stocked = new Dictionary<Blue.KillerKind, int>();
+
+        private static readonly Blue.KillerKind[] SpawnableKinds =
+        {
+            Blue.KillerKind.NormalKiller,
+            Blue.KillerKind.TakuroKiller,
+            Blue.KillerKind.TakeshiKiller,
+            Blue.KillerKind.MikaKiller,
+            Blue.KillerKind.Fuwatty,
+            Blue.KillerKind.CatKiller,
+            Blue.KillerKind.Egg,
+            Blue.KillerKind.BallKiller,
+            Blue.KillerKind.AnatomicalModelKiller,
+            //Blue.KillerKind.AnatomicalModelKillerOrgan,
+            Blue.KillerKind.PrincipalKiller,
+            Blue.KillerKind.SquattoKiller,
+            Blue.KillerKind.NoseHairKiller,
+            Blue.KillerKind.DistortionKiller,
+            Blue.KillerKind.OcarinaKiller,
+            Blue.KillerKind.MiniKiller,
+            //Blue.KillerKind.SquidKiller,
+            //Blue.KillerKind.HorizontalSquidTentacle,
+            //Blue.KillerKind.VerticalSquidTentacle,
+            //Blue.KillerKind.VerticalSquidTentacleWater,
+            Blue.KillerKind.SmallSquidKiller,
+            Blue.KillerKind.LaboratorySquidKiller,
+            Blue.KillerKind.SquidBossKiller,
+            Blue.KillerKind.CatKillerGym,
+            Blue.KillerKind.OcarinaKillerGym,
+            Blue.KillerKind.DistortionKillerGym,
+            Blue.KillerKind.NormalKillerPrison,
+            Blue.KillerKind.NoseHairKillerPrison,
+            Blue.KillerKind.CatKillerPrison,
+            Blue.KillerKind.DistortionKillerPrison,
+            //Blue.KillerKind.FuwattyPrison, Invisible
+            Blue.KillerKind.MiniKillerPrison,
+            Blue.KillerKind.OcarinaKillerPrison,
+            Blue.KillerKind.SquattoKillerPrison,
+            Blue.KillerKind.NormalKillerBroadcastRoom,
+            Blue.KillerKind.NormalKillerBroadcastRoomChase
+        };
+        private const int StockPerKind = 10;
+        private KillerManager _stockBuiltFor;
+
+        private readonly HashSet<string> _missingLogged = new HashSet<string>();
+
+        private static readonly Dictionary<Blue.KillerKind, string> PrefabAlias =
+        new Dictionary<Blue.KillerKind, string>
+        {
+            { Blue.KillerKind.Egg, "EggKiller" },
+            { Blue.KillerKind.LaboratorySquidKiller, "SquidBossKiller2" },
+        };
+
+        private readonly HashSet<string> _aliasRegistered = new HashSet<string>();
+
         private string L(string en, string zh, string ja)
         {
             return _lang == Lang.Ja ? ja : (_lang == Lang.Zh ? zh : en);
@@ -80,7 +150,7 @@ namespace Aooni2SpeedRunTool
         private void InitPathRenderers()
         {
             Material lineMat = new Material(Shader.Find("Sprites/Default"));
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 30; i++)
             {
                 var lineObj = new GameObject($"EnemyPathRenderer_{i}");
                 lineObj.transform.SetParent(this.transform);
@@ -144,6 +214,17 @@ namespace Aooni2SpeedRunTool
                 Toast(L($"Enemy Path: {ShowEnemyPath}", $"敵人路徑顯示: {ShowEnemyPath}", $"鬼の移動経路: {ShowEnemyPath}"));
             }
 
+            if (Input.GetKeyDown(KeyCode.F6))
+            {
+                foreach(var x in MasterProvider.SystemTextMaster._list)
+                {
+                    if(x.Id.Contains("GameOver_DeathText"))
+                    {
+                        Plugin.Log.LogInfo($"{x.Text} Id: {x.Id}");
+                    }
+                }
+            }
+
             if (Input.GetKeyDown(KeyCode.F12))
             {
                 ReloadCurrentSave();
@@ -203,6 +284,187 @@ namespace Aooni2SpeedRunTool
                 UpdateData();
                 CheckLanguageChange();
             }
+        }
+
+        private bool PrepareAssets()
+        {
+            var loader = GameScene.Instance?.AssetLoader;
+            if (loader == null) return false;
+
+            bool allReady = true;
+            foreach (var kind in SpawnableKinds)
+            {
+                string key = kind.ToString();
+                string real = PrefabAlias.TryGetValue(kind, out var r) ? r : key;
+
+                // 1) 先確認真正的 prefab 存在於 Addressables
+                if (!Blue.AssetManagement.AssetLoader.ExistsKey<GameObject>(real, out var loc))
+                {
+                    if (_missingLogged.Add(key))
+                        Plugin.Log.LogWarning($"[Killer] {kind}: '{real}' not found in Addressables, skipped");
+                    continue;   // 不存在的 kind 不擋住流程，之後會被跳過
+                }
+
+                // 2) 載入真正名稱
+                var go = loader.Get<GameObject>(real);
+                if (go == null)
+                {
+                    allReady = false;
+                    try { loader.LoadAsync<GameObject>(real); }
+                    catch (System.Exception e) { Plugin.Log.LogError($"[Killer] load {real}: {e.Message}"); }
+                    continue;
+                }
+
+                // 3) 需要別名的，註冊 alias key 並載入
+                if (real != key)
+                {
+                    var aliased = loader.Get<GameObject>(key);
+                    if (aliased == null)
+                    {
+                        allReady = false;
+                        try
+                        {
+                            if (_aliasRegistered.Add(key))
+                            {
+                                var map = new ResourceLocationMap("Alias_" + key);
+                                map.Add(key, loc);
+                                var locator = map.TryCast<IResourceLocator>();
+                                if (locator == null) { Plugin.Log.LogWarning("cast failed: " + key); continue; }
+                                Addressables.AddResourceLocator(locator);
+                            }
+                            loader.LoadAsync<GameObject>(key);
+                        }
+                        catch (System.Exception e) { Plugin.Log.LogError($"[Killer] alias {key}: {e.Message}"); }
+                    }
+                }
+            }
+            return allReady;
+        }
+
+        private bool BuildBigStock()
+        {
+            var km = GameScene.Instance?.KillerManager;
+            if (km == null) return false;
+            if (km == _stockBuiltFor) return true;          // 已經建過，不重複
+
+            if (km.Chasing)
+            {
+                Toast(L("Can't rebuild while chased", "追逐中無法重建庫存", "追跡中は在庫を再構築できません"));
+                return false;
+            }
+
+            if (!PrepareAssets())
+            {
+                Toast(L("Loading Egg, click again in a moment", "Egg 載入中，請稍後再點一次", "Egg 読込中、少し待ってからもう一度押してください"));
+                return false;
+            }
+
+            try
+            {
+                km._stockKillerList.Clear();
+                foreach (var kind in SpawnableKinds)
+                {
+                    if (GameScene.Instance.AssetLoader.Get<GameObject>(kind.ToString()) == null) continue;   // 沒有 prefab 就略過
+                    try { km.AddStockKillers(kind, StockPerKind); }
+                    catch (System.Exception e) { Plugin.Log.LogError($"[Killer] stock {kind}: {e.Message}"); }
+                }
+                _stockBuiltFor = km;
+                Toast($"Killer stock x{StockPerKind}");
+                return true;
+            }
+            catch (System.Exception e)
+            {
+                Plugin.Log.LogError($"[Killer] 重建庫存失敗: {e}");
+                return false;
+            }
+        }
+
+        private void RefreshKillerKinds()
+        {
+            _killerKinds.Clear();
+            _killerKinds.AddRange(SpawnableKinds);
+        }
+
+        private void SummonKiller(Blue.KillerKind kind)
+        {
+            try
+            {
+                var scene = GameScene.Instance;
+                var map = scene?.CurrentMap;
+                if (map == null || map.Player == null || scene.IsMapTransition)
+                {
+                    Toast(L("Can't summon now", "目前無法召喚", "今は召喚できません"));
+                    return;
+                }
+
+                var loader = scene.AssetLoader;
+                var go = scene.AssetLoader.Get<GameObject>(kind.ToString());
+                if (go == null || go.GetComponent<KillerBase>() == null)
+                {
+                    Toast($"{kind}: prefab not available");
+                    return;
+                }
+                if (go.GetComponent<KillerBase>() == null)
+                {
+                    Toast($"{kind}: no KillerBase");
+                    return;
+                }
+
+                // 確保庫存夠用：場上這種 killer 的數量 >= 已建庫存數時，補 1 隻
+                var km = scene.KillerManager;
+
+                int active = 0;
+                foreach (var k in km.Killers)
+                    if (k != null && k.Kind == kind) active++;
+                if (active >= StockPerKind)
+                {
+                    Toast($"{kind}: stock empty ({StockPerKind})");
+                    return;
+                }
+
+                var p = map.Player;
+                var target = Blue.Vector2IntExtensions.Plus(p.Position, p.Direction, 5);
+                var opt = new Blue.EncountOption();
+
+                km.Encount(Blue.KillerEncountType.Event, kind, target, p.Direction,
+                    new Il2CppSystem.Nullable<float>(0f), false, opt, false, true);
+
+                Toast($"Summon: {kind}");
+            }
+            catch (System.Exception e)
+            {
+                Plugin.Log.LogError($"[Killer] 召喚失敗 {kind}: {e}");
+                Toast(L("Summon failed", "召喚失敗", "召喚失敗"));
+            }
+        }
+
+        private void DrawKillerPanel()
+        {
+            float px = 290f, py = 20f;
+            float pw = Mathf.Min(300f, Screen.width - px - 10f);
+            const float rowH = 28f;
+            int totalPages = Mathf.Max(1, (_killerKinds.Count + KillersPerPage - 1) / KillersPerPage);
+            _killerPage = Mathf.Clamp(_killerPage, 0, totalPages - 1);
+
+            float ph = 30f + KillersPerPage * rowH + 40f;
+            GUI.Box(new Rect(px, py, pw, ph),
+                L($"Summon Killer  {_killerPage + 1}/{totalPages}",
+                  $"召喚鬼  第 {_killerPage + 1}/{totalPages} 頁",
+                  $"鬼を召喚  {_killerPage + 1}/{totalPages}"));
+
+            int start = _killerPage * KillersPerPage;
+            for (int i = 0; i < KillersPerPage; i++)
+            {
+                int idx = start + i;
+                if (idx >= _killerKinds.Count) break;
+                var r = new Rect(px + 8, py + 28 + i * rowH, pw - 16, rowH - 2);
+                if (ClickButton(r, _killerKinds[idx].ToString()))
+                    SummonKiller(_killerKinds[idx]);
+            }
+
+            float navY = py + 28 + KillersPerPage * rowH + 4;
+            if (ClickButton(new Rect(px + 8, navY, 90, 28), L("Prev", "上一頁", "前へ"))) _killerPage--;
+            if (ClickButton(new Rect(px + pw - 98, navY, 90, 28), L("Next", "下一頁", "次へ"))) _killerPage++;
         }
 
         // ★ 核心方法：計算並繪製所有在場敵人的尋路軌跡
@@ -733,7 +995,7 @@ namespace Aooni2SpeedRunTool
             float width = 250f; // 稍微加寬，避免多語系文字折行
 
             // 背景框依是否有鬼動作自動調整高度
-            float boxHeight = (ShowEnemyPath && _currentKillerSteps >= 0) ? 230f : 205f;
+            float boxHeight = (ShowEnemyPath && _currentKillerSteps >= 0) ? 264f : 239f;
             if (_addItemQueue.Count > 0) boxHeight += 25f;
 
             GUI.Box(new Rect(x - 5, y - 5, width, boxHeight), "");
@@ -825,6 +1087,33 @@ namespace Aooni2SpeedRunTool
             {
                 try { DrawMapPanel(); }
                 catch (System.Exception e) { Plugin.Log.LogError($"[Map] DrawMapPanel 例外: {e}"); }
+            }
+
+            curY += 34f;
+            var killerBtn = new Rect(x, curY, width - 10, 30);
+            GUI.Box(killerBtn, _showKillerPanel
+                ? L("Close killer menu", "關閉召喚選單", "召喚メニューを閉じる")
+                : L("Summon Killer", "召喚鬼", "鬼を召喚"));
+            if (ev.type == EventType.MouseDown && ev.button == 0 && killerBtn.Contains(ev.mousePosition))
+            {
+                if (!_showKillerPanel)
+                {
+                    if (BuildBigStock())          // 第一次展開才 Clear + 加 10 隻
+                    {
+                        RefreshKillerKinds();
+                        _showKillerPanel = true;
+                    }
+                }
+                else
+                {
+                    _showKillerPanel = false;
+                }
+                ev.Use();
+            }
+            if (_showKillerPanel)
+            {
+                try { DrawKillerPanel(); }
+                catch (System.Exception e) { Plugin.Log.LogError($"[Killer] DrawKillerPanel 例外: {e}"); }
             }
 
             if (Time.unscaledTime < _toastUntil)
