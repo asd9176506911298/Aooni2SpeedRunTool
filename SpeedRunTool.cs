@@ -1,24 +1,15 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using System.Globalization;
-using BepInEx.Unity.IL2CPP.Utils;
+﻿using System.Collections.Generic;
 using Blue;
-using Blue.AssetManagement;
 using Blue.Common;
 using Blue.Data;
 using Blue.Data.Master.Model;
 using Blue.Room;
 using Blue.Sprites;
-using Blue.Star;
-using Cysharp.Threading.Tasks;
-using HarmonyLib;
 using Il2CppSystem;
 using UnityEngine;
 using UnityEngine.AddressableAssets.ResourceLocators;
 using UnityEngine.AddressableAssets;
-using UnityEngine.Playables;
-using UnityEngine.ResourceManagement.ResourceLocations;
-using static Blue.KillerManager;
+using BepInEx.Configuration;
 
 namespace Aooni2SpeedRunTool
 {
@@ -50,6 +41,8 @@ namespace Aooni2SpeedRunTool
         public static bool NoClip;
         public static bool NoGameOver;
         public static bool ShowEnemyPath = true; // ★ F5 切換敵人路徑顯示
+
+        private readonly KeyDisplay _keyDisplay = new KeyDisplay();
 
         private PlayerData _snap;
         private string _snapMapId;
@@ -191,47 +184,37 @@ namespace Aooni2SpeedRunTool
 
         private void Update()
         {
-            if (Input.GetKeyDown(KeyCode.F1))
+            if (Hotkeys.Down(Hotkeys.NoClip))
             {
                 NoClip = !NoClip;
                 Toast(L($"NoClip: {NoClip}", $"穿牆: {NoClip}", $"すり抜け: {NoClip}"));
             }
 
-            if (Input.GetKeyDown(KeyCode.F2)) SaveState();
-            if (Input.GetKeyDown(KeyCode.F3)) LoadState();
+            if (Hotkeys.Down(Hotkeys.SaveState)) SaveState();
+            if (Hotkeys.Down(Hotkeys.LoadState)) LoadState();
 
-            if (Input.GetKeyDown(KeyCode.F4))
+            if (Hotkeys.Down(Hotkeys.NoGameOver))
             {
                 NoGameOver = !NoGameOver;
                 Toast(L($"NoGameOver: {NoGameOver}", $"無敵: {NoGameOver}", $"ゲームオーバーなし: {NoGameOver}"));
             }
 
-            // ★ 按下 F5：切換敵人路徑預測顯示
-            if (Input.GetKeyDown(KeyCode.F5))
+            if (Hotkeys.Down(Hotkeys.EnemyPath))
             {
                 ShowEnemyPath = !ShowEnemyPath;
                 if (!ShowEnemyPath) ClearEnemyPaths();
                 Toast(L($"Enemy Path: {ShowEnemyPath}", $"敵人路徑顯示: {ShowEnemyPath}", $"鬼の移動経路: {ShowEnemyPath}"));
             }
 
-            if (Input.GetKeyDown(KeyCode.F6))
+            if (Hotkeys.Down(Hotkeys.ResetKeyDisplay))
             {
-                foreach(var x in MasterProvider.SystemTextMaster._list)
-                {
-                    if(x.Id.Contains("GameOver_DeathText"))
-                    {
-                        Plugin.Log.LogInfo($"{x.Text} Id: {x.Id}");
-                    }
-                }
+                _keyDisplay.ResetPosition();
+                Toast(L("Key display reset", "按鍵面板已重置", "キー表示をリセット"));
             }
 
-            if (Input.GetKeyDown(KeyCode.F12))
-            {
-                ReloadCurrentSave();
-            }
+            if (Hotkeys.Down(Hotkeys.ReloadSave)) ReloadCurrentSave();
 
-            // 速度調整
-            if (Input.GetKeyDown(KeyCode.KeypadPlus))
+            if (Hotkeys.Down(Hotkeys.SpeedUp))
             {
                 customSpeed += 1f; customMax += 1f; isCustomSpeedActive = true;
                 Blue.Const.ValueSet.CharacterSpeed._max = new Shirakami.ProtectedFloat(customMax);
@@ -239,7 +222,7 @@ namespace Aooni2SpeedRunTool
                 Toast(L($"Custom Speed: {customSpeed}", $"自訂速度: {customSpeed}", $"カスタム速度: {customSpeed}"));
             }
 
-            if (Input.GetKeyDown(KeyCode.KeypadMinus))
+            if (Hotkeys.Down(Hotkeys.SpeedDown))
             {
                 customSpeed -= 1f; customMax -= 1f; isCustomSpeedActive = true;
                 Blue.Const.ValueSet.CharacterSpeed._max = new Shirakami.ProtectedFloat(customMax);
@@ -247,7 +230,7 @@ namespace Aooni2SpeedRunTool
                 Toast(L($"Custom Speed: {customSpeed}", $"自訂速度: {customSpeed}", $"カスタム速度: {customSpeed}"));
             }
 
-            if (Input.GetKeyDown(KeyCode.KeypadMultiply))
+            if (Hotkeys.Down(Hotkeys.SpeedToggle))
             {
                 isCustomSpeedActive = !isCustomSpeedActive;
                 float spd = isCustomSpeedActive ? customSpeed : originSpeed;
@@ -257,7 +240,7 @@ namespace Aooni2SpeedRunTool
                 Toast(L($"Speed switched ({spd})", $"已切換速度 ({spd})", $"速度切替 ({spd})"));
             }
 
-            if (Input.GetKeyDown(KeyCode.Keypad0))
+            if (Hotkeys.Down(Hotkeys.SpeedReset))
             {
                 customSpeed = 4.5f; customMax = 15.0f; isCustomSpeedActive = true;
                 Blue.Const.ValueSet.CharacterSpeed._max = new Shirakami.ProtectedFloat(customMax);
@@ -990,6 +973,8 @@ namespace Aooni2SpeedRunTool
 
         private void OnGUI()
         {
+            _keyDisplay.HandleInput();   // ★ 先處理拖曳，避免被其他按鈕/框搶走事件
+
             float x = 20f;
             float y = 20f;
             float width = 250f; // 稍微加寬，避免多語系文字折行
@@ -1019,7 +1004,7 @@ namespace Aooni2SpeedRunTool
 
             // 4. 路徑預測開關狀態
             GUI.Label(new Rect(x, curY, width, 22),
-                $"{L("Path (F5)", "路徑預測 (F5)", "経路表示 (F5)")}: {(ShowEnemyPath ? "ON" : "OFF")}");
+                  $"{L("Path", "路徑預測", "経路表示")} ({Hotkeys.Name(Hotkeys.EnemyPath)}): {(ShowEnemyPath ? "ON" : "OFF")}");
             curY += 24f;
 
             // ★ 5. 鬼動作（支援 英文 / 中文 / 日文，且紅色高亮顯示）
@@ -1115,6 +1100,8 @@ namespace Aooni2SpeedRunTool
                 try { DrawKillerPanel(); }
                 catch (System.Exception e) { Plugin.Log.LogError($"[Killer] DrawKillerPanel 例外: {e}"); }
             }
+
+            _keyDisplay.Draw();
 
             if (Time.unscaledTime < _toastUntil)
             {

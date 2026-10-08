@@ -48,6 +48,9 @@
     <Reference Include="UnityEngine.InputLegacyModule">
       <HintPath>..\..\..\Steam\steamapps\common\Aooni2\BepInEx\interop\UnityEngine.InputLegacyModule.dll</HintPath>
     </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>..\..\..\Steam\steamapps\common\Aooni2\BepInEx\interop\UnityEngine.TextRenderingModule.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
 <Target Name="PostBuild" AfterTargets="PostBuildEvent">
